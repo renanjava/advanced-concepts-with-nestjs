@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
+import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 
 @Module({
-  imports: [],
+  imports: [RabbitMQModule],
   controllers: [],
   providers: [],
 })
