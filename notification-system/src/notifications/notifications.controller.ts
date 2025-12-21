@@ -1,4 +1,4 @@
-import { Controller, Post, Body, HttpCode, Logger } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, Logger, Get } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 
@@ -20,6 +20,16 @@ export class NotificationsController {
     return {
       message: 'Notification queued successfully',
       correlationId,
+    };
+  }
+
+  @Get('dlq')
+  async getDLQ() {
+    this.logger.log('📋 Fetching DLQ messages');
+    const messages = await this.notificationsService.getDLQMessages();
+    return {
+      total: messages.length,
+      messages,
     };
   }
 }

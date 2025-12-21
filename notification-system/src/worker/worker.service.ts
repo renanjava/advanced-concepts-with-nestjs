@@ -80,11 +80,14 @@ export class WorkerService implements OnModuleInit {
 
     await new Promise((resolve) => setTimeout(resolve, delay));
 
-    await channel.sendToQueue(QUEUES.NOTIFICATIONS, message, {
+    const buffer = Buffer.from(JSON.stringify(message));
+
+    const headers = originalMsg.properties.headers || {};
+    headers['x-retry-count'] = retryCount + 1;
+
+    await channel.sendToQueue(QUEUES.NOTIFICATIONS, buffer, {
       persistent: true,
-      headers: {
-        'x-retry-count': retryCount + 1,
-      },
+      headers,
     });
   }
 

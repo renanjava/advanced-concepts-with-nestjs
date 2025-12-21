@@ -29,16 +29,10 @@ export class RabbitMQService implements OnModuleInit {
     this.channelWrapper = this.connection.createChannel({
       json: true,
       setup: async (channel: any) => {
-        await channel.assertExchange(EXCHANGES.NOTIFICATIONS_DLX, 'direct', {
-          durable: true,
-        });
-
         await channel.assertQueue(QUEUES.NOTIFICATIONS_DLQ, {
           durable: true,
           arguments: {
             'x-message-ttl': 30000,
-            'x-dead-letter-exchange': EXCHANGES.NOTIFICATIONS,
-            'x-dead-letter-routing-key': 'notification',
           },
         });
 
@@ -66,7 +60,7 @@ export class RabbitMQService implements OnModuleInit {
           'notification',
         );
 
-        this.logger.log('Queues, exchanges and DLQ configured');
+        this.logger.log('Queues, exchange and DLQ configured');
       },
     });
 
