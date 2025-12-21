@@ -32,7 +32,7 @@ export class RabbitMQService implements OnModuleInit {
         await channel.assertQueue(QUEUES.NOTIFICATIONS_DLQ, {
           durable: true,
           arguments: {
-            'x-message-ttl': 30000,
+            'x-message-ttl': 300000,
           },
         });
 

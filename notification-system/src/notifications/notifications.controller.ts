@@ -25,7 +25,7 @@ export class NotificationsController {
 
   @Get('dlq')
   async getDLQ() {
-    this.logger.log('📋 Fetching DLQ messages');
+    this.logger.log('Fetching DLQ messages');
     const messages = await this.notificationsService.getDLQMessages();
     return {
       total: messages.length,
