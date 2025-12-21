@@ -37,32 +37,67 @@ export class WorkerService implements OnModuleInit {
 
   private async processNotification(message: any, msg: any, channel: any) {
     const { correlationId, data } = message;
+    const retryCount = msg.properties.headers?.['x-retry-count'] || 0;
 
     try {
       this.logger.log(
-        `[${correlationId}] Processing notification for ${data.email}`,
+        `[${correlationId}] Processing notification (attempt ${retryCount + 1})`,
       );
 
       await this.sendEmail(data.email, data.message);
 
-      this.logger.log(
-        `[${correlationId}] Notification sent successfully to ${data.email}`,
-      );
+      this.logger.log(`[${correlationId}] Notification sent successfully`);
 
       channel.ack(msg);
     } catch (error) {
       this.logger.error(
-        `[${correlationId}] Error processing notification`,
-        error,
+        `[${correlationId}] Error processing notification (attempt ${retryCount + 1})`,
+        error.message,
       );
 
-      channel.ack(msg);
+      if (retryCount < 3) {
+        await this.retryMessage(message, retryCount, channel, msg);
+      } else {
+        this.logger.error(
+          `[${correlationId}] Max retries reached, sending to DLQ`,
+        );
+        channel.nack(msg, false, false);
+      }
     }
   }
 
-  private async sendEmail(email: string, message: string): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 500));
+  private async retryMessage(
+    message: any,
+    retryCount: number,
+    channel: any,
+    originalMsg: any,
+  ) {
+    const delay = this.calculateBackoff(retryCount);
 
+    this.logger.log(`[${message.correlationId}] Retrying in ${delay}ms...`);
+
+    channel.ack(originalMsg);
+
+    await new Promise((resolve) => setTimeout(resolve, delay));
+
+    await channel.sendToQueue(QUEUES.NOTIFICATIONS, message, {
+      persistent: true,
+      headers: {
+        'x-retry-count': retryCount + 1,
+      },
+    });
+  }
+
+  private calculateBackoff(retryCount: number): number {
+    return Math.pow(2, retryCount) * 1000;
+  }
+
+  private async sendEmail(email: string, message: string): Promise<void> {
+    if (Math.random() > 0.5) {
+      throw new Error('Simulated email sending error');
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
     console.log(`Email sent to ${email}: ${message}`);
   }
 }
