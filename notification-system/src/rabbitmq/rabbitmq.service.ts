@@ -11,11 +11,11 @@ export class RabbitMQService implements OnModuleInit {
   private connection: amqp.AmqpConnectionManager;
   private channelWrapper: ChannelWrapper;
 
-  onModuleInit() {
-    this.connect();
+  async onModuleInit() {
+    await this.connect();
   }
 
-  private connect() {
+  private async connect() {
     this.connection = amqp.connect([RABBITMQ_CONFIG.url]);
 
     this.connection.on('connect', () => {
@@ -29,12 +29,35 @@ export class RabbitMQService implements OnModuleInit {
     this.channelWrapper = this.connection.createChannel({
       json: true,
       setup: async (channel: any) => {
+        await channel.assertExchange(EXCHANGES.NOTIFICATIONS_DLX, 'direct', {
+          durable: true,
+        });
+
+        await channel.assertQueue(QUEUES.NOTIFICATIONS_DLQ, {
+          durable: true,
+          arguments: {
+            'x-message-ttl': 30000,
+            'x-dead-letter-exchange': EXCHANGES.NOTIFICATIONS,
+            'x-dead-letter-routing-key': 'notification',
+          },
+        });
+
+        await channel.bindQueue(
+          QUEUES.NOTIFICATIONS_DLQ,
+          EXCHANGES.NOTIFICATIONS_DLX,
+          'notification',
+        );
+
         await channel.assertExchange(EXCHANGES.NOTIFICATIONS, 'direct', {
           durable: true,
         });
 
         await channel.assertQueue(QUEUES.NOTIFICATIONS, {
           durable: true,
+          arguments: {
+            'x-dead-letter-exchange': EXCHANGES.NOTIFICATIONS_DLX,
+            'x-dead-letter-routing-key': 'notification',
+          },
         });
 
         await channel.bindQueue(
@@ -43,9 +66,11 @@ export class RabbitMQService implements OnModuleInit {
           'notification',
         );
 
-        this.logger.log('Queues and exchanges configured');
+        this.logger.log('Queues, exchanges and DLQ configured');
       },
     });
+
+    await this.channelWrapper.waitForConnect();
   }
 
   async publish(routingKey: string, message: any) {
