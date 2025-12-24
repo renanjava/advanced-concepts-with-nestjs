@@ -1,4 +1,10 @@
-import { IsNotEmpty, IsNumber, IsPositive, IsUUID } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsPositive,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class CreatePaymentDto {
   @IsUUID()
@@ -8,4 +14,8 @@ export class CreatePaymentDto {
   @IsNumber()
   @IsPositive()
   amount: number;
+
+  @IsString()
+  @IsNotEmpty()
+  idempotencyKey: string;
 }

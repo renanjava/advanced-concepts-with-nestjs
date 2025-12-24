@@ -6,6 +6,23 @@ datasource db {
   provider = "postgresql"
 }
 
+enum IdempotencyStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model IdempotencyRecord {
+  key       String            @id
+  status    IdempotencyStatus
+  response  Json?
+  createdAt DateTime          @default(now())
+  expiresAt DateTime
+
+  @@index([status])
+  @@map("idempotency_records")
+}
+
 enum PaymentStatus {
   PENDING
   COMPLETED
@@ -13,13 +30,14 @@ enum PaymentStatus {
 }
 
 model Payment {
-  id           String        @id @default(uuid())
-  userId       String
-  amount       Decimal       @db.Decimal(10, 2)
-  status       PaymentStatus @default(PENDING)
-  errorMessage String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id             String        @id @default(uuid())
+  userId         String
+  amount         Decimal       @db.Decimal(10, 2)
+  status         PaymentStatus @default(PENDING)
+  errorMessage   String?
+  idempotencyKey String        @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@map("payments")
 }
