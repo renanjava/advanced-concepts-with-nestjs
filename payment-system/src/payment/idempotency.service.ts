@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-redundant-type-constituents */
 import { Injectable, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { IdempotencyStatus } from '@prisma/client';
+import { IdempotencyStatus, Prisma } from '@prisma/client';
 
 @Injectable()
 export class IdempotencyService {
@@ -41,8 +41,14 @@ export class IdempotencyService {
     return 'NEW';
   }
 
-  async markCompleted(key: string, response: any): Promise<void> {
-    await this.prisma.idempotencyRecord.update({
+  async markCompleted(
+    key: string,
+    response: any,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    const client = tx ?? this.prisma;
+
+    await client.idempotencyRecord.update({
       where: { key },
       data: {
         status: IdempotencyStatus.COMPLETED,
@@ -51,8 +57,10 @@ export class IdempotencyService {
     });
   }
 
-  async markFailed(key: string): Promise<void> {
-    await this.prisma.idempotencyRecord.update({
+  async markFailed(key: string, tx?: Prisma.TransactionClient): Promise<void> {
+    const client = tx ?? this.prisma;
+
+    await client.idempotencyRecord.update({
       where: { key },
       data: { status: IdempotencyStatus.FAILED },
     });

@@ -36,6 +36,7 @@ export class PaymentService {
 
       if (foundPayment && foundPayment.status === PaymentStatus.FAILED) {
         paymentId = foundPayment.id;
+        await this.processPaymentSimulation();
         return await this.completeBothProcess(foundPayment, dto);
       }
 
@@ -48,14 +49,10 @@ export class PaymentService {
         },
       });
       paymentId = createdPayment.id;
-
+      await this.processPaymentSimulation();
       return await this.completeBothProcess(createdPayment, dto);
     } catch (error) {
-      await this.prisma.payment.update({
-        where: { id: paymentId! },
-        data: { status: PaymentStatus.FAILED },
-      });
-      await this.idempotencyService.markFailed(dto.idempotencyKey);
+      await this.failBothProcess(paymentId!, dto);
       throw error;
     }
   }
@@ -80,22 +77,42 @@ export class PaymentService {
     });
   }
 
-  async completeBothProcess(
-    paymentEntity: Payment,
-    paymentDto: CreatePaymentDto,
-  ) {
-    await this.processPaymentSimulation();
+  completeBothProcess(paymentEntity: Payment, paymentDto: CreatePaymentDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const completedPayment = await tx.payment.update({
+        where: { id: paymentEntity.id },
+        data: { status: PaymentStatus.COMPLETED },
+      });
 
-    const completedPayment = await this.prisma.payment.update({
-      where: { id: paymentEntity.id },
-      data: { status: PaymentStatus.COMPLETED },
+      await this.idempotencyService.markCompleted(
+        paymentDto.idempotencyKey,
+        this.paymentSnapshot(completedPayment),
+        tx,
+      );
+
+      return completedPayment;
     });
+  }
 
-    await this.idempotencyService.markCompleted(
-      paymentDto.idempotencyKey,
-      completedPayment,
-    );
+  failBothProcess(paymentId: string, paymentDto: CreatePaymentDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const failedPayment = await tx.payment.update({
+        where: { id: paymentId },
+        data: { status: PaymentStatus.FAILED },
+      });
+      await this.idempotencyService.markFailed(paymentDto.idempotencyKey, tx);
 
-    return completedPayment;
+      return failedPayment;
+    });
+  }
+
+  paymentSnapshot(payment: Payment) {
+    return {
+      id: payment.id,
+      userId: payment.userId,
+      amount: payment.amount.toString(),
+      status: payment.status,
+      createdAt: payment.createdAt,
+    };
   }
 }
