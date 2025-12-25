@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Controller, Post, Get, Body, Param } from '@nestjs/common';
 import { PaymentService } from './payment.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
@@ -19,5 +20,10 @@ export class PaymentController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.paymentService.findOne(id);
+  }
+
+  @Get(':id/saga')
+  findSagaExecution(@Param('id') paymentId: string) {
+    return this.paymentService.findSagaExecution(paymentId);
   }
 }

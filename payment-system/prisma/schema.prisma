@@ -60,6 +60,54 @@ model FundReservation {
   @@map("fund_reservations")
 }
 
+model SagaExecution {
+  id               String     @id @default(uuid())
+  paymentId        String     @unique
+  currentStep      String
+  status           SagaStatus
+  compensationStep String?
+  error            String?
+  startedAt        DateTime   @default(now())
+  completedAt      DateTime?
+
+  steps SagaStep[]
+
+  @@map("saga_executions")
+}
+
+model SagaStep {
+  id          String     @id @default(uuid())
+  sagaId      String
+  stepName    String
+  status      StepStatus
+  startedAt   DateTime   @default(now())
+  completedAt DateTime?
+  error       String?
+  retryCount  Int        @default(0)
+
+  saga SagaExecution @relation(fields: [sagaId], references: [id])
+
+  @@index([sagaId])
+  @@map("saga_steps")
+}
+
+enum SagaStatus {
+  INITIATED
+  IN_PROGRESS
+  COMPLETED
+  COMPENSATING
+  COMPENSATED
+  FAILED
+}
+
+enum StepStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  COMPENSATED
+}
+
 enum ReservationStatus {
   ACTIVE
   CONFIRMED
@@ -74,6 +122,10 @@ enum IdempotencyStatus {
 
 enum PaymentStatus {
   PENDING
+  FUNDS_RESERVED
+  PROCESSING
   COMPLETED
   FAILED
+  COMPENSATING
+  COMPENSATED
 }

@@ -5,12 +5,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { Payment, PaymentStatus, IdempotencyStatus } from '@prisma/client';
 import { IdempotencyService } from './idempotency.service';
+import { SagaOrchestratorService } from './saga/saga-orchestrator.service';
 
 @Injectable()
 export class PaymentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly idempotencyService: IdempotencyService,
+    private sagaOrchestrator: SagaOrchestratorService,
   ) {}
 
   async createPayment(dto: CreatePaymentDto): Promise<Payment> {
@@ -20,6 +22,10 @@ export class PaymentService {
 
     if (idempotencyCheck === IdempotencyStatus.COMPLETED) {
       return idempotencyCheck;
+    }
+
+    if (idempotencyCheck === 'PROCESSING') {
+      throw new Error('Request is already being processed');
     }
 
     let paymentId: string;
@@ -45,11 +51,31 @@ export class PaymentService {
           idempotencyKey: dto.idempotencyKey,
         },
       });
+
       paymentId = createdPayment.id;
-      await this.processPaymentSimulation();
-      return await this.completeBothProcess(createdPayment, dto);
+
+      await this.sagaOrchestrator.startPaymentSaga({
+        paymentId,
+        userId: dto.userId,
+        amount: dto.amount,
+      });
+
+      const finalPayment = await this.prisma.payment.findUniqueOrThrow({
+        where: { id: paymentId },
+      });
+
+      await this.idempotencyService.markCompleted(
+        dto.idempotencyKey,
+        finalPayment,
+      );
+
+      return finalPayment;
+
+      //await this.processPaymentSimulation();
+      //return await this.completeBothProcess(createdPayment, dto);
     } catch (error) {
-      await this.failBothProcess(paymentId!, dto);
+      //await this.failBothProcess(paymentId!, dto);
+      await this.idempotencyService.markFailed(dto.idempotencyKey);
       throw error;
     }
   }
@@ -60,6 +86,10 @@ export class PaymentService {
     if (Math.random() < 0.5) {
       throw new Error('Payment gateway timeout');
     }
+  }
+
+  findSagaExecution(paymentId: string) {
+    return this.sagaOrchestrator.findSagaByPaymentId(paymentId);
   }
 
   findAll(): Promise<Payment[]> {
