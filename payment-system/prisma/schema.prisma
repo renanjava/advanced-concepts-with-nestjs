@@ -6,12 +6,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum IdempotencyStatus {
-  PROCESSING
-  COMPLETED
-  FAILED
-}
-
 model IdempotencyRecord {
   key       String            @id
   status    IdempotencyStatus
@@ -21,12 +15,6 @@ model IdempotencyRecord {
 
   @@index([status])
   @@map("idempotency_records")
-}
-
-enum PaymentStatus {
-  PENDING
-  COMPLETED
-  FAILED
 }
 
 model Payment {
@@ -40,4 +28,52 @@ model Payment {
   updatedAt      DateTime      @updatedAt
 
   @@map("payments")
+}
+
+model Account {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  balance         Decimal  @db.Decimal(10, 2)
+  reservedBalance Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  reservations FundReservation[]
+
+  @@map("accounts")
+}
+
+model FundReservation {
+  id        String            @id @default(uuid())
+  accountId String
+  paymentId String            @unique
+  amount    Decimal           @db.Decimal(10, 2)
+  status    ReservationStatus @default(ACTIVE)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  expiresAt DateTime
+
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@index([accountId])
+  @@index([status])
+  @@map("fund_reservations")
+}
+
+enum ReservationStatus {
+  ACTIVE
+  CONFIRMED
+  RELEASED
+}
+
+enum IdempotencyStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
 }
