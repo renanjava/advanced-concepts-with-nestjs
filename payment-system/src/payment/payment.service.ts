@@ -28,35 +28,18 @@ export class PaymentService {
     let paymentId: string;
 
     try {
-      const existingPayment = await this.prisma.payment.findUnique({
+      const foundPayment = await this.prisma.payment.findUnique({
         where: {
           idempotencyKey: dto.idempotencyKey,
         },
       });
 
-      if (existingPayment) {
-        paymentId = existingPayment.id;
+      if (foundPayment && foundPayment.status === PaymentStatus.FAILED) {
+        paymentId = foundPayment.id;
+        return await this.completeBothProcess(foundPayment, dto);
       }
 
-      if (existingPayment && existingPayment.status === PaymentStatus.FAILED) {
-        const paymentToRetry = existingPayment;
-
-        await this.processPaymentSimulation();
-
-        const completedPayment = await this.prisma.payment.update({
-          where: { id: paymentToRetry.id },
-          data: { status: PaymentStatus.COMPLETED },
-        });
-
-        await this.idempotencyService.markCompleted(
-          dto.idempotencyKey,
-          completedPayment,
-        );
-
-        return completedPayment;
-      }
-
-      const payment = await this.prisma.payment.create({
+      const createdPayment = await this.prisma.payment.create({
         data: {
           userId: dto.userId,
           amount: dto.amount,
@@ -64,24 +47,9 @@ export class PaymentService {
           idempotencyKey: dto.idempotencyKey,
         },
       });
+      paymentId = createdPayment.id;
 
-      if (payment) {
-        paymentId = payment.id;
-      }
-
-      await this.processPaymentSimulation();
-
-      const completedPayment = await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: PaymentStatus.COMPLETED },
-      });
-
-      await this.idempotencyService.markCompleted(
-        dto.idempotencyKey,
-        completedPayment,
-      );
-
-      return completedPayment;
+      return await this.completeBothProcess(createdPayment, dto);
     } catch (error) {
       await this.prisma.payment.update({
         where: { id: paymentId! },
@@ -110,5 +78,24 @@ export class PaymentService {
     return this.prisma.payment.findUnique({
       where: { id },
     });
+  }
+
+  async completeBothProcess(
+    paymentEntity: Payment,
+    paymentDto: CreatePaymentDto,
+  ) {
+    await this.processPaymentSimulation();
+
+    const completedPayment = await this.prisma.payment.update({
+      where: { id: paymentEntity.id },
+      data: { status: PaymentStatus.COMPLETED },
+    });
+
+    await this.idempotencyService.markCompleted(
+      paymentDto.idempotencyKey,
+      completedPayment,
+    );
+
+    return completedPayment;
   }
 }
