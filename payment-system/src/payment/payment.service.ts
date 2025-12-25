@@ -6,7 +6,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
-import { Payment, PaymentStatus } from '@prisma/client';
+import { Payment, PaymentStatus, IdempotencyStatus } from '@prisma/client';
 import { IdempotencyService } from './idempotency.service';
 
 @Injectable()
@@ -21,7 +21,7 @@ export class PaymentService {
       dto.idempotencyKey,
     );
 
-    if (idempotencyCheck !== 'NEW' && idempotencyCheck !== 'PROCESSING') {
+    if (idempotencyCheck === IdempotencyStatus.COMPLETED) {
       return idempotencyCheck;
     }
 

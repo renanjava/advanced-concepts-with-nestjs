@@ -5,7 +5,12 @@ import { PrismaService } from './../prisma/prisma.service';
 import { PaymentService } from './payment.service';
 import { IdempotencyService } from './idempotency.service';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Payment, PaymentStatus, Prisma } from '@prisma/client';
+import {
+  IdempotencyStatus,
+  Payment,
+  PaymentStatus,
+  Prisma,
+} from '@prisma/client';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 
 type MockPrismaPayment = {
@@ -49,6 +54,11 @@ describe('PaymentService - Tests', () => {
   const mockCompletedPayment: Payment = {
     ...mockPendingPayment,
     status: PaymentStatus.COMPLETED,
+  };
+
+  const mockFailedPayment: Payment = {
+    ...mockPendingPayment,
+    status: PaymentStatus.FAILED,
   };
 
   const mockCreatePaymentDto: CreatePaymentDto = {
@@ -119,6 +129,53 @@ describe('PaymentService - Tests', () => {
           idempotencyKey: mockCreatePaymentDto.idempotencyKey,
         },
       });
+      expect(prismaService.payment.update).toHaveBeenCalledWith({
+        where: { id: mockPendingPayment.id },
+        data: { status: PaymentStatus.COMPLETED },
+      });
+      expect(idempotencyService.markCompleted).toHaveBeenCalledWith(
+        mockCreatePaymentDto.idempotencyKey,
+        mockCompletedPayment,
+      );
+    });
+
+    it('should return existent payment', async () => {
+      idempotencyService.checkOrCreate.mockResolvedValue(
+        IdempotencyStatus.COMPLETED,
+      );
+
+      await service.createPayment(mockCreatePaymentDto);
+
+      expect(idempotencyService.checkOrCreate).toHaveBeenCalledWith(
+        mockCreatePaymentDto.idempotencyKey,
+      );
+      expect(prismaService.payment.findUnique).toHaveBeenCalledTimes(0);
+      expect(prismaService.payment.create).toHaveBeenCalledTimes(0);
+      expect(prismaService.payment.update).toHaveBeenCalledTimes(0);
+      expect(idempotencyService.markCompleted).toHaveBeenCalledTimes(0);
+    });
+
+    it('should retry failed payment process and update to completed', async () => {
+      idempotencyService.checkOrCreate.mockResolvedValue(
+        IdempotencyStatus.FAILED,
+      );
+      prismaService.payment.findUnique.mockResolvedValue(mockFailedPayment);
+      const processPaymentSimulationMock = jest
+        .spyOn(service, 'processPaymentSimulation')
+        .mockImplementation(() => Promise.resolve());
+      prismaService.payment.update.mockResolvedValue(mockCompletedPayment);
+
+      const result = await service.createPayment(mockCreatePaymentDto);
+
+      expect(result).toEqual(mockCompletedPayment);
+      expect(processPaymentSimulationMock).toHaveBeenCalledTimes(1);
+      expect(idempotencyService.checkOrCreate).toHaveBeenCalledWith(
+        mockPendingPayment.idempotencyKey,
+      );
+      expect(prismaService.payment.findUnique).toHaveBeenCalledWith({
+        where: { idempotencyKey: mockCreatePaymentDto.idempotencyKey },
+      });
+      expect(prismaService.payment.create).toHaveBeenCalledTimes(0);
       expect(prismaService.payment.update).toHaveBeenCalledWith({
         where: { id: mockPendingPayment.id },
         data: { status: PaymentStatus.COMPLETED },
