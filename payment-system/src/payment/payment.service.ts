@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-redundant-type-constituents */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -92,7 +92,7 @@ export class PaymentService {
     }
   }
 
-  private async processPaymentSimulation(): Promise<void> {
+  public async processPaymentSimulation(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     if (Math.random() < 0.5) {
