@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import { PrismaService } from './../prisma/prisma.service';
 import { PaymentService } from './payment.service';
-import { IdempotencyService } from './idempotency.service';
+import { IdempotencyService } from './idempotency/idempotency.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Payment, PaymentStatus, Prisma } from '@prisma/client';
 import { CreatePaymentDto } from './dto/create-payment.dto';

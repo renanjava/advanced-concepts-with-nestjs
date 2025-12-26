@@ -2,13 +2,15 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
 import { AccountService } from '../../account/account.service';
 import { SagaStatus, StepStatus, PaymentStatus } from '@prisma/client';
 import { PAYMENT_SAGA_STEPS } from './saga.config';
 import { PaymentGatewayService } from '../../gateway/payment-gateway.service';
 import { LedgerService } from '../../ledger/ledger.service';
 import { AggregateType, EventType } from '../../ledger/events/domain-events';
+import { SagaExecutionRepository } from './saga-execution.repository';
+import { SagaStepRepository } from './saga-step.repository';
+import { PaymentRepository } from '../payment.repository';
 
 export interface SagaContext {
   paymentId: string;
@@ -23,38 +25,31 @@ export class SagaOrchestratorService {
   private readonly logger = new Logger(SagaOrchestratorService.name);
 
   constructor(
-    private prisma: PrismaService,
     private accountService: AccountService,
     private gatewayService: PaymentGatewayService,
     private ledgerService: LedgerService,
+    private sagaExecutionRepository: SagaExecutionRepository,
+    private sagaStepRepository: SagaStepRepository,
+    private paymentRepository: PaymentRepository,
   ) {}
 
   async startPaymentSaga(context: SagaContext): Promise<void> {
     this.logger.log(`Starting saga for payment ${context.paymentId}`);
 
-    const saga = await this.prisma.sagaExecution.create({
-      data: {
-        paymentId: context.paymentId,
-        currentStep: PAYMENT_SAGA_STEPS[0].name,
-        status: SagaStatus.INITIATED,
-      },
-    });
+    const saga = await this.sagaExecutionRepository.create(context.paymentId);
 
     try {
       await this.executeSteps(saga.id, context);
 
-      await this.prisma.sagaExecution.update({
-        where: { id: saga.id },
-        data: {
-          status: SagaStatus.COMPLETED,
-          completedAt: new Date(),
-        },
+      await this.sagaExecutionRepository.update(saga.id, {
+        status: SagaStatus.COMPLETED,
+        completedAt: new Date(),
       });
 
-      await this.prisma.payment.update({
-        where: { id: context.paymentId },
-        data: { status: PaymentStatus.COMPLETED },
-      });
+      await this.paymentRepository.update(
+        context.paymentId,
+        PaymentStatus.COMPLETED,
+      );
 
       this.logger.log(
         `Saga completed successfully for payment ${context.paymentId}`,
@@ -81,54 +76,39 @@ export class SagaOrchestratorService {
     sagaId: string,
     context: SagaContext,
   ): Promise<void> {
-    await this.prisma.sagaExecution.update({
-      where: { id: sagaId },
-      data: { status: SagaStatus.IN_PROGRESS },
+    await this.sagaExecutionRepository.update(sagaId, {
+      status: SagaStatus.IN_PROGRESS,
     });
 
     for (const stepDef of PAYMENT_SAGA_STEPS) {
       this.logger.log(`Executing step: ${stepDef.name}`);
 
-      const step = await this.prisma.sagaStep.create({
-        data: {
-          sagaId,
-          stepName: stepDef.name,
-          status: StepStatus.PENDING,
-        },
-      });
+      const step = await this.sagaStepRepository.create(sagaId, stepDef.name);
 
       try {
-        await this.prisma.sagaStep.update({
-          where: { id: step.id },
-          data: { status: StepStatus.IN_PROGRESS },
+        await this.sagaStepRepository.update(step.id, {
+          status: StepStatus.IN_PROGRESS,
         });
 
         await this.executeStepAction(stepDef.action, context);
 
-        await this.prisma.sagaStep.update({
-          where: { id: step.id },
-          data: {
-            status: StepStatus.COMPLETED,
-            completedAt: new Date(),
-          },
+        await this.sagaStepRepository.update(step.id, {
+          status: StepStatus.COMPLETED,
+          completedAt: new Date(),
         });
 
-        await this.prisma.sagaExecution.update({
-          where: { id: sagaId },
-          data: { currentStep: stepDef.name },
+        await this.sagaExecutionRepository.update(sagaId, {
+          currentStep: stepDef.name,
         });
 
         this.logger.log(`Step ${stepDef.name} completed`);
       } catch (error) {
         this.logger.error(`Step ${stepDef.name} failed:`, error);
 
-        await this.prisma.sagaStep.update({
-          where: { id: step.id },
-          data: {
-            status: StepStatus.FAILED,
-            error: error.message,
-            completedAt: new Date(),
-          },
+        await this.sagaStepRepository.update(step.id, {
+          status: StepStatus.FAILED,
+          error: error.message,
+          completedAt: new Date(),
         });
 
         throw error;
@@ -166,10 +146,10 @@ export class SagaOrchestratorService {
 
     context.reservationId = reservation.id;
 
-    await this.prisma.payment.update({
-      where: { id: context.paymentId },
-      data: { status: PaymentStatus.FUNDS_RESERVED },
-    });
+    await this.paymentRepository.update(
+      context.paymentId,
+      PaymentStatus.FUNDS_RESERVED,
+    );
 
     await this.ledgerService.recordEvent({
       aggregateId: context.paymentId,
@@ -190,10 +170,10 @@ export class SagaOrchestratorService {
   private async processPayment(context: SagaContext): Promise<void> {
     this.logger.log(`Processing payment ${context.paymentId} via gateway`);
 
-    await this.prisma.payment.update({
-      where: { id: context.paymentId },
-      data: { status: PaymentStatus.PROCESSING },
-    });
+    await this.paymentRepository.update(
+      context.paymentId,
+      PaymentStatus.PROCESSING,
+    );
 
     await this.ledgerService.recordEvent({
       aggregateId: context.paymentId,
@@ -266,23 +246,17 @@ export class SagaOrchestratorService {
       userId: context.userId,
     });
 
-    await this.prisma.sagaExecution.update({
-      where: { id: sagaId },
-      data: { status: SagaStatus.COMPENSATING },
+    await this.sagaExecutionRepository.update(sagaId, {
+      status: SagaStatus.COMPENSATING,
     });
 
-    await this.prisma.payment.update({
-      where: { id: context.paymentId },
-      data: { status: PaymentStatus.COMPENSATING },
-    });
+    await this.paymentRepository.update(
+      context.paymentId,
+      PaymentStatus.COMPENSATING,
+    );
 
-    const completedSteps = await this.prisma.sagaStep.findMany({
-      where: {
-        sagaId,
-        status: StepStatus.COMPLETED,
-      },
-      orderBy: { startedAt: 'desc' },
-    });
+    const completedSteps =
+      await this.sagaStepRepository.findAllCompletedSteps(sagaId);
 
     for (const step of completedSteps) {
       const stepDef = PAYMENT_SAGA_STEPS.find((s) => s.name === step.stepName);
@@ -293,9 +267,8 @@ export class SagaOrchestratorService {
         try {
           await this.executeCompensation(stepDef.compensationAction, context);
 
-          await this.prisma.sagaStep.update({
-            where: { id: step.id },
-            data: { status: StepStatus.COMPENSATED },
+          await this.sagaStepRepository.update(step.id, {
+            status: StepStatus.COMPENSATED,
           });
 
           this.logger.log(`Step ${step.stepName} compensated`);
@@ -305,18 +278,15 @@ export class SagaOrchestratorService {
       }
     }
 
-    await this.prisma.sagaExecution.update({
-      where: { id: sagaId },
-      data: {
-        status: SagaStatus.COMPENSATED,
-        completedAt: new Date(),
-      },
+    await this.sagaExecutionRepository.update(sagaId, {
+      status: SagaStatus.COMPENSATED,
+      completedAt: new Date(),
     });
 
-    await this.prisma.payment.update({
-      where: { id: context.paymentId },
-      data: { status: PaymentStatus.COMPENSATED },
-    });
+    await this.paymentRepository.update(
+      context.paymentId,
+      PaymentStatus.COMPENSATING,
+    );
 
     this.logger.warn(`Saga compensated for payment ${context.paymentId}`);
   }
@@ -361,24 +331,7 @@ export class SagaOrchestratorService {
     }
   }
 
-  private async simulatePaymentGateway(context: SagaContext): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    if (Math.random() < 0.2) {
-      throw new Error('Payment gateway timeout');
-    }
-
-    context.gatewayTransactionId = `gw-${Date.now()}`;
-  }
-
   findSagaByPaymentId(paymentId: string) {
-    return this.prisma.sagaExecution.findUnique({
-      where: { paymentId },
-      include: {
-        steps: {
-          orderBy: { startedAt: 'asc' },
-        },
-      },
-    });
+    return this.sagaExecutionRepository.findBy(paymentId);
   }
 }

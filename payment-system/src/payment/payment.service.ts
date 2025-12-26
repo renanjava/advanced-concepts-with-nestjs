@@ -1,21 +1,23 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { Payment, PaymentStatus, IdempotencyStatus } from '@prisma/client';
-import { IdempotencyService } from './idempotency.service';
+import { IdempotencyService } from './idempotency/idempotency.service';
 import { SagaOrchestratorService } from './saga/saga-orchestrator.service';
 import { AggregateType, EventType } from '../ledger/events/domain-events';
 import { LedgerService } from '../ledger/ledger.service';
+import { PaymentRepository } from './payment.repository';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class PaymentService {
   constructor(
-    private readonly prisma: PrismaService,
+    private paymentRepository: PaymentRepository,
     private readonly idempotencyService: IdempotencyService,
     private sagaOrchestrator: SagaOrchestratorService,
     private ledgerService: LedgerService,
+    private prisma: PrismaService,
   ) {}
 
   async createPayment(dto: CreatePaymentDto): Promise<Payment> {
@@ -34,11 +36,9 @@ export class PaymentService {
     let paymentId: string;
 
     try {
-      const foundPayment = await this.prisma.payment.findUnique({
-        where: {
-          idempotencyKey: dto.idempotencyKey,
-        },
-      });
+      const foundPayment = await this.paymentRepository.findBy(
+        dto.idempotencyKey,
+      );
 
       if (foundPayment && foundPayment.status === PaymentStatus.FAILED) {
         paymentId = foundPayment.id;
@@ -46,14 +46,7 @@ export class PaymentService {
         return await this.completeBothProcess(foundPayment, dto);
       }
 
-      const createdPayment = await this.prisma.payment.create({
-        data: {
-          userId: dto.userId,
-          amount: dto.amount,
-          status: PaymentStatus.PENDING,
-          idempotencyKey: dto.idempotencyKey,
-        },
-      });
+      const createdPayment = await this.paymentRepository.create(dto);
 
       paymentId = createdPayment.id;
 
@@ -76,9 +69,8 @@ export class PaymentService {
         amount: dto.amount,
       });
 
-      const finalPayment = await this.prisma.payment.findUniqueOrThrow({
-        where: { id: paymentId },
-      });
+      const finalPayment =
+        await this.paymentRepository.findByOrThrow(paymentId);
 
       await this.idempotencyService.markCompleted(
         dto.idempotencyKey,
@@ -86,11 +78,7 @@ export class PaymentService {
       );
 
       return finalPayment;
-
-      //await this.processPaymentSimulation();
-      //return await this.completeBothProcess(createdPayment, dto);
     } catch (error) {
-      //await this.failBothProcess(paymentId!, dto);
       await this.idempotencyService.markFailed(dto.idempotencyKey);
       throw error;
     }
@@ -109,23 +97,20 @@ export class PaymentService {
   }
 
   findAll(): Promise<Payment[]> {
-    return this.prisma.payment.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.paymentRepository.findAll();
   }
 
   findOne(id: string): Promise<Payment | null> {
-    return this.prisma.payment.findUnique({
-      where: { id },
-    });
+    return this.paymentRepository.findBy(id);
   }
 
   completeBothProcess(paymentEntity: Payment, paymentDto: CreatePaymentDto) {
     return this.prisma.$transaction(async (tx) => {
-      const completedPayment = await tx.payment.update({
-        where: { id: paymentEntity.id },
-        data: { status: PaymentStatus.COMPLETED },
-      });
+      const completedPayment = await this.paymentRepository.update(
+        paymentEntity.id,
+        PaymentStatus.COMPLETED,
+        tx,
+      );
 
       await this.idempotencyService.markCompleted(
         paymentDto.idempotencyKey,
@@ -139,10 +124,11 @@ export class PaymentService {
 
   failBothProcess(paymentId: string, paymentDto: CreatePaymentDto) {
     return this.prisma.$transaction(async (tx) => {
-      const failedPayment = await tx.payment.update({
-        where: { id: paymentId },
-        data: { status: PaymentStatus.FAILED },
-      });
+      const failedPayment = await this.paymentRepository.update(
+        paymentId,
+        PaymentStatus.FAILED,
+        tx,
+      );
       await this.idempotencyService.markFailed(paymentDto.idempotencyKey, tx);
 
       return failedPayment;
