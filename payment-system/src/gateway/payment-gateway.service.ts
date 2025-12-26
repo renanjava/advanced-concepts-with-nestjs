@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
 import { PaymentGatewaySimulatorService } from './payment-gateway-simulator.service';
 import {
@@ -30,7 +31,6 @@ export class PaymentGatewayService {
     } catch (error) {
       if (error instanceof CircuitBreakerOpenError) {
         this.logger.warn('Payment rejected by circuit breaker');
-        // Estratégia de fallback
         return this.fallbackStrategy(request, error);
       }
       throw error;
@@ -63,7 +63,6 @@ export class PaymentGatewayService {
   ): GatewayTransactionResponse {
     this.logger.warn('Using fallback strategy: Queue for retry');
 
-    // Estratégia 1: Retornar status PROCESSING (será processado depois)
     return {
       transactionId: `pending-${Date.now()}`,
       status: 'processing' as any,
@@ -73,12 +72,6 @@ export class PaymentGatewayService {
       errorMessage:
         'Payment queued for processing. Gateway temporarily unavailable.',
     };
-
-    // Estratégia 2: Usar gateway alternativo (se houver)
-    // return this.alternativeGateway.process(request);
-
-    // Estratégia 3: Salvar em fila para retry posterior
-    // await this.queue.add('retry-payment', request);
   }
 
   makeGatewayUnhealthy(): void {

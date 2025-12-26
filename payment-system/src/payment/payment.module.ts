@@ -5,9 +5,10 @@ import { IdempotencyService } from './idempotency.service';
 import { SagaOrchestratorService } from './saga/saga-orchestrator.service';
 import { AccountModule } from '../account/account.module';
 import { GatewayModule } from '../gateway/gateway.module';
+import { LedgerModule } from '../ledger/ledger.module';
 
 @Module({
-  imports: [AccountModule, GatewayModule],
+  imports: [AccountModule, GatewayModule, LedgerModule],
   controllers: [PaymentController],
   providers: [PaymentService, IdempotencyService, SagaOrchestratorService],
 })

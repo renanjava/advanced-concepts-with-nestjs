@@ -6,6 +6,8 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { Payment, PaymentStatus, IdempotencyStatus } from '@prisma/client';
 import { IdempotencyService } from './idempotency.service';
 import { SagaOrchestratorService } from './saga/saga-orchestrator.service';
+import { AggregateType, EventType } from '../ledger/events/domain-events';
+import { LedgerService } from '../ledger/ledger.service';
 
 @Injectable()
 export class PaymentService {
@@ -13,6 +15,7 @@ export class PaymentService {
     private readonly prisma: PrismaService,
     private readonly idempotencyService: IdempotencyService,
     private sagaOrchestrator: SagaOrchestratorService,
+    private ledgerService: LedgerService,
   ) {}
 
   async createPayment(dto: CreatePaymentDto): Promise<Payment> {
@@ -53,6 +56,19 @@ export class PaymentService {
       });
 
       paymentId = createdPayment.id;
+
+      await this.ledgerService.recordEvent({
+        aggregateId: paymentId,
+        aggregateType: AggregateType.PAYMENT,
+        eventType: EventType.PAYMENT_INITIATED,
+        eventData: {
+          paymentId: paymentId,
+          userId: dto.userId,
+          amount: dto.amount,
+          idempotencyKey: dto.idempotencyKey,
+        },
+        userId: dto.userId,
+      });
 
       await this.sagaOrchestrator.startPaymentSaga({
         paymentId,

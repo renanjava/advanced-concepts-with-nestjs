@@ -91,6 +91,65 @@ model SagaStep {
   @@map("saga_steps")
 }
 
+model DomainEvent {
+  id            String   @id @default(uuid())
+  aggregateId   String
+  aggregateType String
+  eventType     String
+  eventData     Json
+  version       Int
+  timestamp     DateTime @default(now())
+  userId        String?
+  metadata      Json?
+
+  @@unique([aggregateId, version])
+  @@index([aggregateId, aggregateType])
+  @@index([eventType, timestamp])
+  @@map("domain_events")
+}
+
+model EventSnapshot {
+  id          String   @id @default(uuid())
+  aggregateId String   @unique
+  version     Int
+  state       Json
+  createdAt   DateTime @default(now())
+
+  @@index([aggregateId])
+  @@map("event_snapshots")
+}
+
+model PaymentProjection {
+  paymentId     String    @id
+  userId        String
+  amount        Decimal   @db.Decimal(10, 2)
+  status        String
+  gatewayTxId   String?
+  reservationId String?
+  totalEvents   Int
+  lastEventType String
+  lastEventAt   DateTime
+  createdAt     DateTime
+  completedAt   DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@map("payment_projections")
+}
+
+model AccountBalanceProjection {
+  accountId       String   @id
+  userId          String   @unique
+  currentBalance  Decimal  @db.Decimal(10, 2)
+  reservedBalance Decimal  @db.Decimal(10, 2)
+  totalDebits     Decimal  @db.Decimal(10, 2)
+  totalCredits    Decimal  @db.Decimal(10, 2)
+  lastEventAt     DateTime
+  updatedAt       DateTime @updatedAt
+
+  @@map("account_balance_projections")
+}
+
 enum SagaStatus {
   INITIATED
   IN_PROGRESS

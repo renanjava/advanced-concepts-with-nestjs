@@ -6,7 +6,7 @@ for i in {1..50}; do
     -d "{
       \"userId\": \"550e8400-e29b-41d4-a716-446655440007\",
       \"amount\": 10,
-      \"idempotencyKey\": \"test-oa-$i\"
+      \"idempotencyKey\": \"test-uu-$i\"
     }"
   sleep 1
 done

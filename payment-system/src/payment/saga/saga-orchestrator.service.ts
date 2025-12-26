@@ -7,6 +7,8 @@ import { AccountService } from '../../account/account.service';
 import { SagaStatus, StepStatus, PaymentStatus } from '@prisma/client';
 import { PAYMENT_SAGA_STEPS } from './saga.config';
 import { PaymentGatewayService } from '../../gateway/payment-gateway.service';
+import { LedgerService } from '../../ledger/ledger.service';
+import { AggregateType, EventType } from '../../ledger/events/domain-events';
 
 export interface SagaContext {
   paymentId: string;
@@ -24,6 +26,7 @@ export class SagaOrchestratorService {
     private prisma: PrismaService,
     private accountService: AccountService,
     private gatewayService: PaymentGatewayService,
+    private ledgerService: LedgerService,
   ) {}
 
   async startPaymentSaga(context: SagaContext): Promise<void> {
@@ -58,6 +61,17 @@ export class SagaOrchestratorService {
       );
     } catch (error) {
       this.logger.error(`Saga failed for payment ${context.paymentId}:`, error);
+
+      await this.ledgerService.recordEvent({
+        aggregateId: context.paymentId,
+        aggregateType: AggregateType.PAYMENT,
+        eventType: EventType.PAYMENT_FAILED,
+        eventData: {
+          paymentId: context.paymentId,
+          reason: error.message,
+        },
+        userId: context.userId,
+      });
 
       await this.compensate(saga.id, context);
     }
@@ -157,6 +171,19 @@ export class SagaOrchestratorService {
       data: { status: PaymentStatus.FUNDS_RESERVED },
     });
 
+    await this.ledgerService.recordEvent({
+      aggregateId: context.paymentId,
+      aggregateType: AggregateType.PAYMENT,
+      eventType: EventType.FUNDS_RESERVED,
+      eventData: {
+        paymentId: context.paymentId,
+        userId: context.userId,
+        reservationId: reservation.id,
+        amount: context.amount,
+      },
+      userId: context.userId,
+    });
+
     this.logger.log(`Funds reserved: ${reservation.id}`);
   }
 
@@ -166,6 +193,16 @@ export class SagaOrchestratorService {
     await this.prisma.payment.update({
       where: { id: context.paymentId },
       data: { status: PaymentStatus.PROCESSING },
+    });
+
+    await this.ledgerService.recordEvent({
+      aggregateId: context.paymentId,
+      aggregateType: AggregateType.PAYMENT,
+      eventType: EventType.PAYMENT_PROCESSING,
+      eventData: {
+        paymentId: context.paymentId,
+      },
+      userId: context.userId,
     });
 
     const gatewayResponse = await this.gatewayService.processPayment({
@@ -198,6 +235,18 @@ export class SagaOrchestratorService {
 
     await this.accountService.confirmReservation(context.paymentId);
 
+    await this.ledgerService.recordEvent({
+      aggregateId: context.paymentId,
+      aggregateType: AggregateType.PAYMENT,
+      eventType: EventType.PAYMENT_COMPLETED,
+      eventData: {
+        paymentId: context.paymentId,
+        gatewayTransactionId: context.gatewayTransactionId,
+        completedAt: new Date(),
+      },
+      userId: context.userId,
+    });
+
     this.logger.log(`Payment confirmed: ${context.paymentId}`);
   }
 
@@ -206,6 +255,16 @@ export class SagaOrchestratorService {
     context: SagaContext,
   ): Promise<void> {
     this.logger.warn(`Starting compensation for saga ${sagaId}`);
+
+    await this.ledgerService.recordEvent({
+      aggregateId: context.paymentId,
+      aggregateType: AggregateType.PAYMENT,
+      eventType: EventType.PAYMENT_COMPENSATED,
+      eventData: {
+        paymentId: context.paymentId,
+      },
+      userId: context.userId,
+    });
 
     await this.prisma.sagaExecution.update({
       where: { id: sagaId },

@@ -4,6 +4,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { AccountModule } from './account/account.module';
 import { GatewayModule } from './gateway/gateway.module';
+import { LedgerModule } from './ledger/ledger.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { GatewayModule } from './gateway/gateway.module';
     PrismaModule,
     AccountModule,
     GatewayModule,
+    LedgerModule,
   ],
   controllers: [],
   providers: [],
