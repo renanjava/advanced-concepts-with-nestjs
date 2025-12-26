@@ -1,13 +1,12 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AccountService } from '../../account/account.service';
 import { SagaStatus, StepStatus, PaymentStatus } from '@prisma/client';
 import { PAYMENT_SAGA_STEPS } from './saga.config';
+import { PaymentGatewayService } from '../../gateway/payment-gateway.service';
 
 export interface SagaContext {
   paymentId: string;
@@ -24,6 +23,7 @@ export class SagaOrchestratorService {
   constructor(
     private prisma: PrismaService,
     private accountService: AccountService,
+    private gatewayService: PaymentGatewayService,
   ) {}
 
   async startPaymentSaga(context: SagaContext): Promise<void> {
@@ -161,16 +161,36 @@ export class SagaOrchestratorService {
   }
 
   private async processPayment(context: SagaContext): Promise<void> {
-    this.logger.log(`Processing payment ${context.paymentId}`);
+    this.logger.log(`Processing payment ${context.paymentId} via gateway`);
 
     await this.prisma.payment.update({
       where: { id: context.paymentId },
       data: { status: PaymentStatus.PROCESSING },
     });
 
-    await this.simulatePaymentGateway(context);
+    const gatewayResponse = await this.gatewayService.processPayment({
+      amount: context.amount,
+      currency: 'BRL',
+      paymentMethod: 'credit_card',
+      customer: {
+        id: context.userId,
+      },
+      metadata: {
+        paymentId: context.paymentId,
+      },
+    });
 
-    this.logger.log(`Payment processed: ${context.paymentId}`);
+    context.gatewayTransactionId = gatewayResponse.transactionId;
+
+    if (gatewayResponse.status !== 'approved') {
+      throw new Error(
+        `Payment declined: ${gatewayResponse.errorMessage || 'Unknown error'}`,
+      );
+    }
+
+    this.logger.log(
+      `Payment processed successfully: ${gatewayResponse.transactionId}`,
+    );
   }
 
   private async confirmPayment(context: SagaContext): Promise<void> {
@@ -250,9 +270,9 @@ export class SagaOrchestratorService {
       case 'releaseFunds':
         await this.releaseFunds(context);
         break;
-      /*case 'cancelPayment':
+      case 'cancelPayment':
         await this.cancelPayment(context);
-        break;*/
+        break;
       default:
         this.logger.warn(`Unknown compensation action: ${action}`);
     }
@@ -263,10 +283,24 @@ export class SagaOrchestratorService {
     await this.accountService.releaseReservation(context.paymentId);
   }
 
-  /*private cancelPayment(context: SagaContext): Promise<void> {
-    this.logger.log(`Canceling payment ${context.paymentId}`);
-    // await this.paymentGateway.cancel(context.gatewayTransactionId);
-  }*/
+  private async cancelPayment(context: SagaContext): Promise<void> {
+    if (!context.gatewayTransactionId) {
+      this.logger.warn('No gateway transaction to cancel');
+      return;
+    }
+
+    this.logger.log(`Canceling payment ${context.gatewayTransactionId}`);
+
+    try {
+      await this.gatewayService.refundPayment({
+        transactionId: context.gatewayTransactionId,
+        reason: 'Saga compensation',
+      });
+      this.logger.log('Payment canceled successfully');
+    } catch (error) {
+      this.logger.error('Failed to cancel payment:', error);
+    }
+  }
 
   private async simulatePaymentGateway(context: SagaContext): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 1000));
