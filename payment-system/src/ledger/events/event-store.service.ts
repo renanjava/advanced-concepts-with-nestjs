@@ -3,8 +3,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { DomainEventData, AggregateType } from './events/domain-events';
+import { PrismaService } from '../../prisma/prisma.service';
+import { DomainEventData, AggregateType } from './domain-events';
 import { DomainEvent } from '@prisma/client';
 
 @Injectable()

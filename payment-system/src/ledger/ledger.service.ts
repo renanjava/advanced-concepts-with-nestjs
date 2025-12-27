@@ -2,8 +2,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
-import { EventStoreService } from './event-store.service';
-import { EventProjectionService } from './event-projection.service';
+import { EventStoreService } from './events/event-store.service';
+import { EventProjectionService } from './events/event-projection.service';
 import { SnapshotService } from './snapshot.service';
 import {
   DomainEventData,

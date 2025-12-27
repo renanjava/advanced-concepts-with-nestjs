@@ -2,9 +2,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { DomainEvent } from '@prisma/client';
-import { EventType } from './events/domain-events';
+import { EventType } from './domain-events';
 
 @Injectable()
 export class EventProjectionService {

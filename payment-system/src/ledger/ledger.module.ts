@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { LedgerController } from './ledger.controller';
 import { LedgerService } from './ledger.service';
-import { EventStoreService } from './event-store.service';
-import { EventProjectionService } from './event-projection.service';
+import { EventStoreService } from './events/event-store.service';
+import { EventProjectionService } from './events/event-projection.service';
 import { SnapshotService } from './snapshot.service';
 
 @Module({
