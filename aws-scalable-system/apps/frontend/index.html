@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sistema de Pedidos — Fase 1</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 1rem;
+        max-width: 900px;
+        margin: 0 auto;
+      }
+      form {
+        margin-bottom: 1rem;
+      }
+      label {
+        display: block;
+        margin: 0.5rem 0 0.25rem;
+      }
+      input {
+        padding: 0.4rem;
+        width: 100%;
+        max-width: 400px;
+      }
+      button {
+        margin-top: 0.6rem;
+      }
+      pre {
+        background: #f7f7f7;
+        padding: 0.5rem;
+        overflow: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Sistema de Pedidos — Fase 1</h1>
+
+    <section>
+      <h2>Criar Pedido</h2>
+      <form id="orderForm">
+        <label for="userId">User ID</label>
+        <input id="userId" name="userId" required />
+
+        <label for="productId">Product ID</label>
+        <input id="productId" name="productId" required />
+
+        <label for="quantity">Quantity</label>
+        <input
+          id="quantity"
+          name="quantity"
+          type="number"
+          min="1"
+          value="1"
+          required
+        />
+
+        <button type="submit">Criar Pedido</button>
+      </form>
+
+      <div>
+        <h3>Resultado</h3>
+        <pre id="result">—</pre>
+      </div>
+    </section>
+
+    <section>
+      <h2>Listar Pedidos</h2>
+      <button id="listBtn">Listar Todos</button>
+      <div>
+        <h3>Pedidos</h3>
+        <pre id="ordersList">—</pre>
+      </div>
+    </section>
+
+    <script>
+      (function () {
+        const API_URL = "http://localhost:3000";
+
+        const orderForm = document.getElementById("orderForm");
+        const resultEl = document.getElementById("result");
+        const listBtn = document.getElementById("listBtn");
+        const ordersList = document.getElementById("ordersList");
+
+        orderForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const data = {
+            userId: document.getElementById("userId").value,
+            productId: document.getElementById("productId").value,
+            quantity: parseInt(document.getElementById("quantity").value, 10),
+          };
+
+          try {
+            const response = await fetch(`${API_URL}/orders`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(data),
+            });
+            const json = await response.json();
+            resultEl.textContent = JSON.stringify(json, null, 2);
+          } catch (err) {
+            resultEl.textContent = "Erro: " + (err.message || String(err));
+          }
+        });
+
+        listBtn.addEventListener("click", async () => {
+          try {
+            const response = await fetch(`${API_URL}/orders`);
+            const json = await response.json();
+            ordersList.textContent = JSON.stringify(json, null, 2);
+          } catch (err) {
+            ordersList.textContent = "Erro: " + (err.message || String(err));
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

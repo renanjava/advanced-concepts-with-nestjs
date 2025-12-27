@@ -1,18 +1,26 @@
 {
   "name": "@repo/database",
   "version": "0.0.0",
-  "main": "./index.ts",
-  "types": "./index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio"
+    "build": "tsc",
+    "db:generate": "dotenv -e ../../.env -- prisma generate",
+    "db:push": "dotenv -e ../../.env -- prisma db push",
+    "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
+    "db:studio": "dotenv -e ../../.env -- prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^5.0.0"
   },
   "devDependencies": {
-    "prisma": "^5.0.0"
+    "prisma": "^5.0.0",
+    "typescript": "^5.3.3",
+    "dotenv": "^16.0.0",
+    "dotenv-cli": "^6.0.0",
+    "@types/node": "^20.0.0"
   }
 }

@@ -7,12 +7,29 @@
   ],
   "scripts": {
     "dev": "turbo run dev",
+    "prisma:migrate": "dotenv -e .env -- prisma migrate dev --schema=packages/database/prisma/schema.prisma",
+    "prisma:studio": "dotenv -e .env -- prisma studio --schema=packages/database/prisma/schema.prisma",
     "build": "turbo run build",
     "test:load": "k6 run load-tests/phase1.js",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down"
   },
   "devDependencies": {
-    "turbo": "^2.0.0"
-  }
+    "@nestjs/common": "11.1.7",
+    "@nestjs/config": "^4.0.2",
+    "@nestjs/core": "11.1.7",
+    "@nestjs/mapped-types": "2.0.4",
+    "@nestjs/platform-express": "11.1.7",
+    "dotenv": "^17.2.3",
+    "dotenv-cli": "^6.0.0",
+    "prettier": "^3.6.2",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "^7.8.1",
+    "turbo": "^2.5.8",
+    "typescript": "5.9.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "pnpm@8.0.0"
 }
