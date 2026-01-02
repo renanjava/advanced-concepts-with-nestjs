@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable } from '@nestjs/common';
 import { CreatePaymentDto } from './dto/create-payment.dto';
-import { Payment, PaymentStatus, IdempotencyStatus } from '@prisma/client';
+import { Payment, PaymentStatus } from '@prisma/client';
 import { IdempotencyService } from './idempotency/idempotency.service';
 import { SagaOrchestratorService } from './saga/saga-orchestrator.service';
 import { AggregateType, EventType } from '../ledger/events/domain-events';
@@ -25,12 +25,8 @@ export class PaymentService {
       dto.idempotencyKey,
     );
 
-    if (idempotencyCheck === IdempotencyStatus.COMPLETED) {
-      return idempotencyCheck;
-    }
-
-    if (idempotencyCheck === 'PROCESSING') {
-      throw new Error('Request is already being processed');
+    if (idempotencyCheck.status === 'COMPLETED') {
+      return idempotencyCheck.payment;
     }
 
     let paymentId: string;

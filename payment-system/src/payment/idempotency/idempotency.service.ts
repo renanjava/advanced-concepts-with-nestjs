@@ -1,23 +1,30 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-redundant-type-constituents */
 import { Injectable, ConflictException } from '@nestjs/common';
-import { IdempotencyStatus, Prisma } from '@prisma/client';
+import { IdempotencyStatus, Payment, Prisma } from '@prisma/client';
 import { IdempotencyRepository } from './idempotency.repository';
+
+export type IdempotencyResult =
+  | { status: 'NEW' }
+  | { status: 'COMPLETED'; payment: Payment };
 
 @Injectable()
 export class IdempotencyService {
   constructor(private idempotencyRepository: IdempotencyRepository) {}
 
-  async checkOrCreate(key: string): Promise<'NEW' | 'PROCESSING' | any> {
+  async checkOrCreate(key: string): Promise<IdempotencyResult> {
     const existing = await this.idempotencyRepository.findBy(key);
 
     if (!existing) {
       await this.idempotencyRepository.create(key);
-      return 'NEW';
+      return { status: 'NEW' };
     }
 
     if (existing.status === IdempotencyStatus.COMPLETED) {
-      return existing.response;
+      return {
+        status: 'COMPLETED',
+        payment: existing.response as unknown as Payment,
+      };
     }
 
     if (existing.status === IdempotencyStatus.PROCESSING) {
@@ -25,7 +32,7 @@ export class IdempotencyService {
     }
 
     await this.idempotencyRepository.update(key, IdempotencyStatus.PROCESSING);
-    return 'NEW';
+    return { status: 'NEW' };
   }
 
   async markCompleted(
